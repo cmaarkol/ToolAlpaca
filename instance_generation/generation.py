@@ -26,7 +26,7 @@ parser.add_argument("-llm", type=str, default=None)
 parser.add_argument("--server_url", type=str, default="http://127.0.0.1:5678")
 parser.add_argument("--output_prefix", type=str, default="api_data")
 parser.add_argument("--agent_prompt", type=str, default="train_v2")
-parser.add_argument("--device", type=int, default=0)
+parser.add_argument("--device", type=str, default="cpu")
 parser.add_argument("--offset", type=int, default=0)
 parser.add_argument("--length", type=int, default=-1)
 parser.add_argument("--use_cache", action="store_true", default=False)
@@ -52,6 +52,8 @@ else:
     )
     llm = HuggingFacePipeline(pipeline=generator)
 
+print('loaded model and tokenizer')
+
 api_data = json.load(open(args.api_data_path, "r"))
 
 if args.length == -1:
@@ -63,20 +65,26 @@ final_output_path = os.path.join(args.output_dir, f"{args.output_prefix}_{args.o
 if args.use_cache:
     res = requests.get(f"{args.server_url}/__simulator_cache__/open")
 
+print('loaded api data')
+
 for api_idx, api in tqdm(enumerate(api_data)):
+    print(f'generating from {api["Name"]}')
     api["Instances"] = []
     if "Instructions" not in api or len(api["Instructions"]) == 0:
         continue
     openapi_spec = load_openapi_spec(api["Documentation"])
     input_valid, output_valid = analyze_openapi_spec(openapi_spec)
     if input_valid and output_valid:
+        server_url = openapi_spec["servers"][0]["url"] if "servers" in openapi_spec else args.server_url
         agent = get_agent(
             llm=llm,
             api_data=api,
-            server_url=args.server_url,
+            # server_url=args.server_url,
+            server_url=server_url,
             agent_prompt=prompt_proj[args.agent_prompt],
             enable_getDetails=not args.without_getDetails,
         )
+        print(f'got agent with url {server_url}')
         Answers = []
         for idx, inst in enumerate(api["Instructions"]):
             if len(api.get("Authentication", [])) > 0:
@@ -89,18 +97,18 @@ for api_idx, api in tqdm(enumerate(api_data)):
                 output = str(output)
             except Exception as e:
                 logger.error(e)
-                output = {"error": str(e)}  
-            
-            if args.use_cache:
-                res = requests.get(f"{args.server_url}/__simulator_cache__/clear/{api['Name']}")
-                print(res.text)
+                output = {"error": str(e)}
 
+            if args.use_cache:
+                res = requests.get(f"{server_url}/__simulator_cache__/clear/{api['Name']}")
+                print(res.text)
+            print(f'got output {output}')
             Answers.append(output)
 
         api["Instances"] = Answers
         json.dump(
-            api_data, 
-            open(final_output_path, "w", encoding="utf-8"), 
-            indent=4, 
+            api_data,
+            open(final_output_path, "w", encoding="utf-8"),
+            indent=4,
             ensure_ascii=False
         )

@@ -27,7 +27,7 @@ def get_agent(
     enable_getDetails=True,
     return_intermediate_steps=True,
 ):
-        
+
     openapi_spec = load_openapi_spec(api_data["Documentation"], replace_refs=True)
     components_descriptions = escape(api_data["Function_Description"]["components"])
 
@@ -41,7 +41,8 @@ def get_agent(
             description += components_descriptions
         path, method = api_data["Function_Projection"][func_name]
         tools.append(Tool(
-            base_url=server_url + "/" + api_data["Name"] if server_url else None,
+            base_url=server_url.rstrip("/") + "/" if server_url else None,
+            # base_url=server_url + "/" + api_data["Name"] if server_url else None,
             func_name=func_name,
             openapi_spec=openapi_spec,
             path=path,
@@ -53,8 +54,8 @@ def get_agent(
     AgentType = CustomZeroShotAgent if agent_prompt == test_prompt_v1 else ZeroShotAgent
 
     prompt = AgentType.create_prompt(
-        tools, 
-        prefix=agent_prompt["prefix"], 
+        tools,
+        prefix=agent_prompt["prefix"],
         suffix=agent_prompt["suffix"],
         format_instructions=agent_prompt["format_instructions"],
         input_variables=["input", "agent_scratchpad"]
@@ -67,7 +68,7 @@ def get_agent(
     agent = AgentType(llm_chain=llm_chain, allowed_tools=[t.name for t in tools])
     if agent_prompt != test_prompt_v1:
         agent.output_parser = CustomMRKLOutputParser()
-    
+
     agent_executor = CustomAgentExecutor.from_agent_and_tools(
         agent=agent,
         tools=tools,
