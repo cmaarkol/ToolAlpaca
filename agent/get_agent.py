@@ -48,7 +48,8 @@ def get_agent(
             path=path,
             method=method,
             description=description,
-            retrieval_available="retrieval" in api_data.get("external_tools", [])
+            retrieval_available=False
+            # retrieval_available="retrieval" in api_data.get("external_tools", [])
         ))
 
     AgentType = CustomZeroShotAgent if agent_prompt == test_prompt_v1 else ZeroShotAgent

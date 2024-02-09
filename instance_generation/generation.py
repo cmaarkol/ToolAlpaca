@@ -15,6 +15,10 @@ from agent.get_agent import get_agent
 from agent.agent_prompts import prompt_proj
 from utils import load_openapi_spec, analyze_openapi_spec
 
+from dotenv import load_dotenv
+from genai.extensions.langchain import LangChainInterface
+from genai.credentials import Credentials
+from genai.schemas import GenerateParams
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +38,29 @@ parser.add_argument("--real", action="store_true", default=False)
 parser.add_argument("--without_getDetails", action="store_true", default=False)
 args = parser.parse_args()
 
+print(args)
+
 if args.llm is None or args.llm.lower() in ["gpt3", "gpt-3"]:
     llm = OpenAI(temperature=0.0)
 elif args.llm.lower() in ["chatgpt"]:
     llm = ChatOpenAI(temperature=0.0)
+elif args.llm.lower() in ["meta-llama/llama-2-70b-chat"]:
+    # autheticate bam api key
+    load_dotenv()
+    bam_api_key = os.getenv("BAM_API_TOKEN", None)
+    bam_api_url = os.getenv("BAM_SERVICE_URL", None)
+
+    llm = LangChainInterface(
+        credentials=Credentials(bam_api_key, api_endpoint=bam_api_url),
+        model=args.llm,
+        params=GenerateParams(**{
+            "decoding_method": "sample",
+            "max_new_tokens": 1024,
+            "min_new_tokens": 10,
+            "temperature": 0.7,
+        }),
+    )
+    print('loaded bam model')
 else:
     tokenizer = AutoTokenizer.from_pretrained(args.llm, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(args.llm, trust_remote_code=True).half()
@@ -51,8 +74,7 @@ else:
         do_sample=False
     )
     llm = HuggingFacePipeline(pipeline=generator)
-
-print('loaded model and tokenizer')
+    print('loaded huggingface model and tokenizer')
 
 api_data = json.load(open(args.api_data_path, "r"))
 
@@ -79,7 +101,6 @@ for api_idx, api in tqdm(enumerate(api_data)):
         agent = get_agent(
             llm=llm,
             api_data=api,
-            # server_url=args.server_url,
             server_url=server_url,
             agent_prompt=prompt_proj[args.agent_prompt],
             enable_getDetails=not args.without_getDetails,
